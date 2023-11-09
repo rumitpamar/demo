@@ -1,0 +1,91 @@
+services:
+  db:
+    image: postgres
+    container_name: bookstore-db
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: p@ssw0rd
+      POSTGRES_DB: bookstore
+    volumes:
+      - "/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d bookstore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+  app:    
+    build:
+      dockerfile: ./Dockerfile
+      target: host
+    container_name: bookstore-app
+    environment:
+      AWS_DEFAULT_REGION: us-east-1      
+      RUNNING_ENVIRONMENT: Local
+      ASPNETCORE_URLS: "https://+"
+      ASPNETCORE_HTTPS_PORT: 5001
+      ASPNETCORE_Kestrel__Certificates__Default__Password: P@ssw0rd
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/certificate.pfx       
+    depends_on:   
+      db:
+        condition: service_healthy   
+      migrator:
+        condition: service_completed_successfully      
+    ports:
+      - "5001:443"
+    healthcheck:
+      test: ["CMD", "curl", "-k -v", "https://localhost/swagger/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:    
+    build: 
+      dockerfile: ./Dockerfile
+      target: web
+    container_name: bookstore-web
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      RUNNING_ENVIRONMENT: Local
+      ASPNETCORE_URLS: "https://+"
+      ASPNETCORE_HTTPS_PORT: 5002
+      ASPNETCORE_Kestrel__Certificates__Default__Password: P@ssw0rd
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/certificate.pfx       
+    depends_on:   
+      app:
+        condition: service_started
+    ports:
+      - "5002:443"  
+
+  auth:    
+    build: 
+      dockerfile: ./Dockerfile      
+      target: auth
+    container_name: bookstore-auth
+    environment:
+      AWS_DEFAULT_REGION: us-east-1      
+      RUNNING_ENVIRONMENT: Local
+      ASPNETCORE_URLS: "https://+"
+      ASPNETCORE_HTTPS_PORT: 5003
+      ASPNETCORE_Kestrel__Certificates__Default__Password: P@ssw0rd
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/certificate.pfx       
+    depends_on:   
+      app:
+        condition: service_started               
+    ports:
+      - "5003:443" 
+
+  migrator:
+    build:
+      dockerfile: ./Dockerfile
+      target: migrator
+    container_name: bookstore-migrator
+    environment:
+      AWS_DEFAULT_REGION: us-east-1      
+      RUNNING_ENVIRONMENT: Local
+    depends_on:
+      db:
+        condition: service_healthy
